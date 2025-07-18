@@ -1,0 +1,74 @@
+# Import libraries
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import classification_report, accuracy_score
+import nltk
+import re
+from nltk.corpus import stopwords
+
+# Download stopwords once (uncomment if needed)
+# nltk.download('stopwords')
+
+# Load True and Fake news datasets
+true_df = pd.read_csv('True.csv')
+fake_df = pd.read_csv('Fake.csv')
+
+# Add labels: 0 = True, 1 = Fake
+true_df['label'] = 0
+fake_df['label'] = 1
+
+# Combine datasets
+df = pd.concat([true_df, fake_df]).reset_index(drop=True)
+
+# Shuffle dataset
+df = df.sample(frac=1, random_state=42).reset_index(drop=True)
+
+print(f"Total dataset size: {len(df)} samples")
+display(df.head())
+
+# Preprocessing function
+def preprocess_text(text):
+    text = str(text).lower()
+    text = re.sub(r'\W', ' ', text)  # Remove special characters
+    text = re.sub(r'\s+', ' ', text)  # Remove extra whitespace
+    stop_words = set(stopwords.words('english'))
+    tokens = text.split()
+    filtered_words = [word for word in tokens if word not in stop_words]
+    return ' '.join(filtered_words)
+
+# Apply preprocessing on the column containing news text
+# Note: adjust 'text' below to your actual news column name if different
+df['clean_text'] = df['text'].apply(preprocess_text)
+
+# Split dataset into train and test
+X_train, X_test, y_train, y_test = train_test_split(
+    df['clean_text'], df['label'], test_size=0.3, random_state=42)
+
+# Vectorize text data
+tfidf_vectorizer = TfidfVectorizer(max_features=5000)
+X_train_tfidf = tfidf_vectorizer.fit_transform(X_train)
+X_test_tfidf = tfidf_vectorizer.transform(X_test)
+
+# Train Logistic Regression classifier
+model = LogisticRegression()
+model.fit(X_train_tfidf, y_train)
+
+# Predict on test set
+y_pred = model.predict(X_test_tfidf)
+
+# Evaluate results
+print("Accuracy:", accuracy_score(y_test, y_pred))
+print("\nClassification Report:\n", classification_report(y_test, y_pred, zero_division=0))
+
+# Function to predict new news text
+def predict_fake_news(text):
+    processed = preprocess_text(text)
+    vectorized = tfidf_vectorizer.transform([processed])
+    pred = model.predict(vectorized)
+    return "Fake News" if pred[0] == 1 else "Real News"
+
+# Example test
+example_text = "The economy is expected to grow by 3% next year."
+print(f"Prediction for example: {predict_fake_news(example_text)}")
